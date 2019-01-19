@@ -33,38 +33,50 @@ class DockerHelper:
         with open(build_log_file, 'w') as build_log:
             try:
                 client = docker.APIClient(base_url=base_url)
-                output = client.build(
-                    path=path,
-                    dockerfile=dockerfile,
-                    tag=tag,
-                    forcerm=True,
-                    timeout=3600,
-                    pull=True)
-                buffer = ""
-                for token in output:
-                    if token.startswith('{"stream":'):
-                        token = json.loads(token)
-                        token = token[token.keys()[0]].encode('utf-8')
-                        buffer += token
-                    elif token.startswith('{"errorDetail":'):
-                        token = json.loads(token)
-                        raise Exception(token['errorDetail']['message'])
-                    while "\n" in buffer:
-                        index = buffer.index("\n")
-                        line = buffer[:index]
-                        buffer = buffer[index + 1:]
-                        log(line,
+                # pull the pre-built image from my repo (if it exists) and re-tag it
+                try:
+                    techempowerRepo = tag
+                    talawahRepo = techempowerRepo.replace("techempower", "talawah")
+                    log("Pulling " + talawahRepo)
+                    talawahImage = self.client.images.pull(talawahRepo, tag='latest')
+                    log("Tagging " + talawahRepo + " as " + techempowerRepo)
+                    tagOutput = talawahImage.tag(techempowerRepo, tag='latest')
+                    if tagOutput == False:
+                        raise Exception('tag failed')
+                except Exception as e:
+                    log("Docker pull/tag failed. Building locally: " + str(e))
+                    output = client.build(
+                        path=path,
+                        dockerfile=dockerfile,
+                        tag=tag,
+                        forcerm=True,
+                        timeout=3600,
+                        pull=True)
+                    buffer = ""
+                    for token in output:
+                        if token.startswith('{"stream":'):
+                            token = json.loads(token)
+                            token = token[token.keys()[0]].encode('utf-8')
+                            buffer += token
+                        elif token.startswith('{"errorDetail":'):
+                            token = json.loads(token)
+                            raise Exception(token['errorDetail']['message'])
+                        while "\n" in buffer:
+                            index = buffer.index("\n")
+                            line = buffer[:index]
+                            buffer = buffer[index + 1:]
+                            log(line,
+                                prefix=log_prefix,
+                                file=build_log,
+                                color=Fore.WHITE + Style.BRIGHT \
+                                    if re.match(r'^Step \d+\/\d+', line) else '')
+
+                    if buffer:
+                        log(buffer,
                             prefix=log_prefix,
                             file=build_log,
                             color=Fore.WHITE + Style.BRIGHT \
-                                if re.match(r'^Step \d+\/\d+', line) else '')
-
-                if buffer:
-                    log(buffer,
-                        prefix=log_prefix,
-                        file=build_log,
-                        color=Fore.WHITE + Style.BRIGHT \
-                            if re.match(r'^Step \d+\/\d+', buffer) else '')
+                                if re.match(r'^Step \d+\/\d+', buffer) else '')
             except Exception:
                 tb = traceback.format_exc()
                 log("Docker build failed; terminating",
