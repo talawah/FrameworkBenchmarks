@@ -19,4 +19,8 @@ RUN pip install colorama==0.3.1 requests MySQL-python psycopg2-binary pymongo do
 ENV PYTHONPATH /FrameworkBenchmarks
 ENV FWROOT /FrameworkBenchmarks
 
+RUN mkdir /FrameworkBenchmarks
+COPY toolset/ /FrameworkBenchmarks/toolset/
+COPY frameworks/ /FrameworkBenchmarks/frameworks/
+
 ENTRYPOINT ["python", "/FrameworkBenchmarks/toolset/run-tests.py"]
