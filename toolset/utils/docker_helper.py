@@ -35,16 +35,26 @@ class DockerHelper:
                 client = docker.APIClient(base_url=base_url)
                 # pull the pre-built image from my repo (if it exists) and re-tag it
                 try:
-                    techempowerRepo = tag
-                    talawahRepo = techempowerRepo.replace("techempower", "talawah")
-                    log("Pulling " + talawahRepo)
-                    talawahImage = self.client.images.pull(talawahRepo, tag='latest')
-                    log("Tagging " + talawahRepo + " as " + techempowerRepo)
-                    tagOutput = talawahImage.tag(techempowerRepo, tag='latest')
-                    if tagOutput == False:
+                    techempower_repo = tag
+                    talawah_repo = techempower_repo.replace('techempower', 'talawah')
+
+                    # Special handling for db images
+                    if talawah_repo == 'talawah/mysql':
+                        talawah_repo = 'talawah/tfb.db.mysql'
+                    if talawah_repo == 'talawah/postgres':
+                        talawah_repo = 'talawah/tfb.db.postgres'
+                    if talawah_repo == 'talawah/mongodb':
+                        talawah_repo = 'talawah/tfb.db.mongodb'
+
+                    log('Pulling ' + talawah_repo)
+                    talawah_image = self.client.images.pull(talawah_repo, tag='latest')
+
+                    log('Tagging ' + talawah_repo + ' as ' + techempower_repo)
+                    tag_output = talawah_image.tag(techempower_repo, tag='latest')
+                    if not tag_output:
                         raise Exception('tag failed')
                 except Exception as e:
-                    log("Docker pull/tag failed. Building locally: " + str(e))
+                    log('Docker pull/tag failed. Building locally: ' + str(e))
                     output = client.build(
                         path=path,
                         dockerfile=dockerfile,
