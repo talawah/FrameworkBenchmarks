@@ -47,10 +47,10 @@ class DockerHelper:
                         talawah_repo = 'talawah/tfb.db.mongodb'
 
                     log('Pulling ' + talawah_repo)
-                    talawah_image = self.client.images.pull(talawah_repo, tag='latest')
+                    client.pull(talawah_repo, tag='latest')
 
                     log('Tagging ' + talawah_repo + ' as ' + techempower_repo)
-                    tag_output = talawah_image.tag(techempower_repo, tag='latest')
+                    tag_output = client.tag(talawah_repo, techempower_repo, tag='latest')
                     if not tag_output:
                         raise Exception('tag failed')
                 except Exception as e:
