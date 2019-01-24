@@ -35,26 +35,27 @@ class DockerHelper:
                 client = docker.APIClient(base_url=base_url)
                 # pull the pre-built image from my repo (if it exists) and re-tag it
                 try:
-                    techempower_repo = tag
-                    talawah_repo = techempower_repo.replace('techempower', 'talawah')
+                    techempower_image_tag = tag
+                    talawah_image_tag = techempower_image_tag.replace('techempower', 'talawah')
 
                     # Special handling for db images
-                    if talawah_repo == 'talawah/mysql':
-                        talawah_repo = 'talawah/tfb.db.mysql'
-                    if talawah_repo == 'talawah/postgres':
-                        talawah_repo = 'talawah/tfb.db.postgres'
-                    if talawah_repo == 'talawah/mongodb':
-                        talawah_repo = 'talawah/tfb.db.mongodb'
+                    if talawah_image_tag == 'talawah/mysql':
+                        talawah_image_tag = 'talawah/tfb.db.mysql'
+                    if talawah_image_tag == 'talawah/postgres':
+                        talawah_image_tag = 'talawah/tfb.db.postgres'
+                    if talawah_image_tag == 'talawah/mongodb':
+                        talawah_image_tag = 'talawah/tfb.db.mongodb'
 
-                    log('Pulling ' + talawah_repo)
-                    client.pull(talawah_repo, tag='latest')
+                    log('Pulling ' + talawah_image_tag)
+                    client.pull(talawah_image_tag, tag='latest')
 
-                    log('Tagging ' + talawah_repo + ' as ' + techempower_repo)
-                    tag_output = client.tag(talawah_repo, techempower_repo, tag='latest')
+                    log('Tagging ' + talawah_image_tag + ' as ' + techempower_image_tag)
+                    tag_output = client.tag(talawah_image_tag, techempower_image_tag, tag='latest')
                     if not tag_output:
                         raise Exception('tag failed')
                 except Exception as e:
-                    log('Docker pull/tag failed. Building locally: ' + str(e))
+                    log('Docker pull/tag failed: ' + str(e))
+                    log('Building locally instead')
                     output = client.build(
                         path=path,
                         dockerfile=dockerfile,
