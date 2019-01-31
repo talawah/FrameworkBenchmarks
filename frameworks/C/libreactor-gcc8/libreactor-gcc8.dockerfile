@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:18.04 as builder
 
 RUN apt update -yqq
 RUN apt install -yqq wget make file gcc-8 g++-8
@@ -25,5 +25,12 @@ RUN wget -q https://github.com/fredrikwidlund/libclo/releases/download/v0.1.0/li
     make && make install
 
 RUN make clean && make
+
+
+
+FROM ubuntu:18.04
+
+WORKDIR /libreactor
+COPY --from=builder /libreactor .
 
 CMD ["./libreactor"]
