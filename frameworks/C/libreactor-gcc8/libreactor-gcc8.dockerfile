@@ -3,7 +3,9 @@ FROM ubuntu:18.04 as builder
 RUN apt update -yqq
 RUN apt install -yqq wget make file gcc-8 g++-8
 
-ADD ./ /libreactor
+COPY src/ /libreactor/src/
+COPY Makefile /libreactor
+
 WORKDIR /libreactor
 
 RUN wget -q https://github.com/fredrikwidlund/libdynamic/releases/download/v1.1.0/libdynamic-1.1.0.tar.gz && \
