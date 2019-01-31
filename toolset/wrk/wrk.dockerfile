@@ -1,9 +1,12 @@
-FROM buildpack-deps:xenial
+FROM buildpack-deps:xenial as builder
 
 WORKDIR /wrk
 RUN curl -sL https://github.com/wg/wrk/archive/4.1.0.tar.gz | tar xz --strip-components=1
 RUN make > /dev/null
-RUN cp wrk /usr/local/bin
+
+FROM ubuntu:xenial
+COPY --from=builder /wrk/wrk /usr/local/bin/
+RUN apt update -yqq && apt install -yqq curl
 
 WORKDIR /
 # Required scripts for benchmarking
