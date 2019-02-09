@@ -35,6 +35,9 @@ class DockerHelper:
                 client = docker.APIClient(base_url=base_url)
                 # pull the pre-built image from my repo (if it exists) and re-tag it
                 try:
+                    if tag == 'techempower/tfb.test.libreactor' or tag == 'techempower/tfb.test.libreactor-talawah':
+                        raise Exception('manually building libreactor')
+
                     techempower_image_tag = tag
                     talawah_image_tag = techempower_image_tag.replace('techempower', 'talawah')
 
