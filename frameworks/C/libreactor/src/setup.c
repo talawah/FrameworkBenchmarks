@@ -42,7 +42,7 @@ int realtime(void)
   return 0;
 }
 
-static void cpu_list(vector *list, int sib)
+static void cpu_list(vector *list, int use_hyperthreading)
 {
   struct cpu cpu;
   char path[1024], buf[1024];
@@ -64,8 +64,13 @@ static void cpu_list(vector *list, int sib)
       close(fd);
 
       id = strtoul(buf, NULL, 0);
-      if (!sib && id != i)
-        continue;
+
+      if (use_hyperthreading){
+        id = i; /* add every cpu (whether physical or logical) to the list */
+      }
+      else if (id != i){
+        continue; /* ignore sibling CPUs */
+      }
 
       cpu = (struct cpu) {0};
       cpu.id = id;
@@ -75,7 +80,7 @@ static void cpu_list(vector *list, int sib)
     }
 }
 
-void setup(size_t skip, int sib)
+void setup(size_t skip, int use_hyperthreading)
 {
   vector list;
   struct cpu *cpu;
@@ -84,7 +89,8 @@ void setup(size_t skip, int sib)
   pid_t cpid;
 
   signal(SIGPIPE, SIG_IGN);
-  cpu_list(&list, sib);
+  cpu_list(&list, use_hyperthreading);
+
   for (i = 0; i < vector_size(&list); i ++)
     {
       if (i % skip != 0)

@@ -126,12 +126,23 @@ static int tcp_event(void *state, int type, void *data)
   return REACTOR_OK;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
   reactor_timer timer;
   reactor_tcp tcp;
+  int opt;
+  int use_hyperthreading = 0;
 
-  setup(1, 0);  
+  while ((opt = getopt(argc, argv, "h")) != -1) {
+    switch (opt) {
+      case 'h': use_hyperthreading = 1; break;
+      default:
+        fprintf(stderr, "Usage: %s [-h]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+  }
+
+  setup(1, use_hyperthreading);
   (void) reactor_core_construct();
   (void) reactor_timer_open(&timer, timer_event, &timer, 1, 1000000000);
   (void) reactor_tcp_open(&tcp, tcp_event, &tcp, "0.0.0.0", "8080", REACTOR_TCP_FLAG_SERVER);
