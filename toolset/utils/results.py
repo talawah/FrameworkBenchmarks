@@ -116,15 +116,18 @@ class Results:
                 for line in raw_data:
                     if "Queries:" in line or "Concurrency:" in line:
                         is_warmup = False
-                        rawData = None
+                        rawData = dict()
+                        results['results'].append(rawData)
+                        m = re.search("[0-9]+", line)
+                        if "Queries:" in line:
+                            rawData['queries'] = int(m.group(0))
+                        else:
+                            rawData['concurrency'] = int(m.group(0))
                         continue
                     if "Warmup" in line or "Primer" in line:
                         is_warmup = True
                         continue
                     if not is_warmup:
-                        if rawData is None:
-                            rawData = dict()
-                            results['results'].append(rawData)
                         if "Latency" in line:
                             m = re.findall(r"([0-9]+\.*[0-9]*[us|ms|s|m|%]+)",
                                            line)
@@ -154,6 +157,9 @@ class Results:
                                           line)
                             if m != None:
                                 rawData['5xx'] = int(m.group(1))
+                        if "Requests/sec" in line:
+                            m = re.search("[0-9]+", line)
+                            rawData["requestsPerSecond"] = int(m.group(0))
                         if "STARTTIME" in line:
                             m = re.search("[0-9]+", line)
                             rawData["startTime"] = int(m.group(0))
