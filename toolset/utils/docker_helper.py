@@ -174,16 +174,17 @@ class DockerHelper:
             extra_hosts = None
             name = "tfb-server"
 
-            if self.benchmarker.config.network is None:
-                extra_hosts = {
-                    socket.gethostname():
-                    str(self.benchmarker.config.server_host),
-                    'tfb-server':
-                    str(self.benchmarker.config.server_host),
-                    'tfb-database':
-                    str(self.benchmarker.config.database_host)
-                }
-                name = None
+            # This code prevents me from passing in a hostname instead of an ip for server_host
+            # if self.benchmarker.config.network is None:
+            #     extra_hosts = {
+            #         socket.gethostname():
+            #         str(self.benchmarker.config.server_host),
+            #         'tfb-server':
+            #         str(self.benchmarker.config.server_host),
+            #         'tfb-database':
+            #         str(self.benchmarker.config.database_host)
+            #     }
+            #     name = None
 
             sysctl = {'net.core.somaxconn': 65535}
 
