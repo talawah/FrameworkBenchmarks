@@ -1,12 +1,12 @@
-FROM buildpack-deps:xenial as builder
+FROM buildpack-deps:bionic as builder
 
 WORKDIR /wrk
 RUN curl -sL https://github.com/wg/wrk/archive/4.1.0.tar.gz | tar xz --strip-components=1
 RUN make > /dev/null
 
-FROM ubuntu:xenial
+FROM ubuntu:bionic
 COPY --from=builder /wrk/wrk /usr/local/bin/
-RUN apt update -yqq && apt install -yqq curl
+RUN apt update -yqq && apt install -yqq curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
 # Required scripts for benchmarking
