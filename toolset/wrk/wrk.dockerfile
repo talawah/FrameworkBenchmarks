@@ -14,8 +14,9 @@ COPY pipeline.lua pipeline.lua
 COPY concurrency.sh concurrency.sh
 COPY pipeline.sh pipeline.sh
 COPY query.sh query.sh
+COPY dns-roundrobin.lua dns-roundrobin.lua
 
-RUN chmod 777 pipeline.lua concurrency.sh pipeline.sh query.sh
+RUN chmod 777 pipeline.lua concurrency.sh pipeline.sh query.sh dns-roundrobin.lua
 
 # Environment vars required by the wrk scripts with nonsense defaults
 ENV name name
