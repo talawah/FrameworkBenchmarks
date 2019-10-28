@@ -11,8 +11,8 @@ FROM amazonlinux:2.0.20190823.1 as builder
 # Fluent Bit version
 ENV FLB_MAJOR 1
 ENV FLB_MINOR 3
-ENV FLB_PATCH 2
-ENV FLB_VERSION 1.3.2
+ENV FLB_PATCH 1
+ENV FLB_VERSION 1.3.1
 
 ENV FLB_TARBALL http://github.com/fluent/fluent-bit/archive/v$FLB_VERSION.zip
 RUN mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log /tmp/fluent-bit-master/
