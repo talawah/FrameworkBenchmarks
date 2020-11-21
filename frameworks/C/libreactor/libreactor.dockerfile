@@ -29,8 +29,8 @@ RUN wget -q https://github.com/talawahtech/libreactor/archive/v2.0.0-dev-2020-11
     ./configure && \
     make install AM_CFLAGS="-std=gnu11 -g -O3 -march=native -flto -fcommon -I./src"
 
-COPY FrameworkBenchmarks/frameworks/C/libreactor/src-2/ /libreactor/src/
-COPY FrameworkBenchmarks/frameworks/C/libreactor/Makefile-2 /libreactor/Makefile
+COPY src/ /libreactor/src/
+COPY Makefile /libreactor/Makefile
 
 RUN make
 
