@@ -1,122 +1,155 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <limits.h>
 #include <string.h>
-#include <time.h>
 #include <err.h>
+#include <sched.h>
+#include <sys/eventfd.h>
+#include <sys/wait.h>
 
 #include <dynamic.h>
 #include <reactor.h>
 #include <clo.h>
 
-#include "setup.h"
 #include "helpers.h"
 
-#define JSON_PREAMBLE "HTTP/1.1 200 OK\r\n"\
-                      "Server: libreactor\r\n"\
-                      "Content-Type: application/json\r\n"
 
-#define TEXT_PREAMBLE "HTTP/1.1 200 OK\r\n"\
-                      "Server: libreactor\r\n"\
-                      "Content-Type: text/plain\r\n"
+// Function Declarations
+static core_status server_handler(core_event *event);
+static int fork_workers();
 
-struct http_server
+
+int main()
 {
-  reactor_net    net;
-  list           connections;
-};
+  int parent_eventfd;
+  server s;
 
-static void plaintext(reactor_stream *stream, char *response)
-{
-  static const reactor_vector text_preamble = { .base = TEXT_PREAMBLE, .size = sizeof(TEXT_PREAMBLE) - 1 };
-  write_response(stream, text_preamble, reactor_vector_string(response));
+  // Ignore the "broken pipe" signal
+  signal(SIGPIPE, SIG_IGN);
+
+  // fork_workers() forks a separate child/worker process for each available cpu and returns an eventfd from the parent
+  // The eventfd is used to signal the parent. This guarantees the forking order needed for REUSEPORT_CBPF to work well
+  parent_eventfd = fork_workers();
+
+  core_construct(NULL);
+  server_construct(&s, server_handler, &s);
+  server_option_set(&s, SERVER_OPTION_BPF);
+  server_open(&s, 0, 8080);
+
+  // Once this worker process is listening on the socket, signal the parent that it can proceed with the next fork
+  eventfd_write(parent_eventfd, (eventfd_t) 1);
+  close(parent_eventfd);
+
+  core_loop(NULL);
+  core_destruct(NULL);
 }
 
-static void json(reactor_stream *stream, clo *json_object)
-{
-  static const reactor_vector json_preamble = { .base = JSON_PREAMBLE, .size = sizeof(JSON_PREAMBLE) - 1 };
-  static char json_string[4096];
 
-  (void) clo_encode(json_object, json_string, sizeof(json_string));
-  write_response(stream, json_preamble, reactor_vector_string(json_string));
-}
-
-static reactor_status http_handler(reactor_event *event)
+static core_status server_handler(core_event *event)
 {
   static char hello_string[] = "Hello, World!";
   static char default_string[] = "Hello from libreactor!\n";
   static clo_pair json_pair[] = {{ .string = "message", .value = { .type = CLO_STRING, .string = "Hello, World!" }}};
   static clo json_object[] = {{ .type = CLO_OBJECT, .object = json_pair }};
 
-  reactor_http *http_connection = event->state;
-  reactor_http_request *request;
-
-  if (event->type == REACTOR_HTTP_EVENT_REQUEST){
-    request = (reactor_http_request *) event->data;
-
-    if (reactor_vector_equal(request->target, reactor_vector_string("/json"))){
-      json(&http_connection->stream, json_object);
-    }
-    else if (reactor_vector_equal(request->target, reactor_vector_string("/plaintext"))){
-      plaintext(&http_connection->stream, hello_string);
-    }
-    else{
-      plaintext(&http_connection->stream, default_string);
-    }
-    return REACTOR_OK;
-  }
-  else {
-    reactor_http_destruct(http_connection);
-    list_erase(http_connection, NULL);
-    return REACTOR_ABORT;
-  }
-}
-
-static reactor_status net_handler(reactor_event *event)
-{
-  struct http_server *server = event->state;
-  reactor_http connection_initializer = (reactor_http) {0};
-  reactor_http *http_connection;
+  server *server = event->state;
+  server_context *context = (server_context *) event->data;
 
   switch (event->type)
     {
-    case REACTOR_NET_EVENT_ACCEPT:
-      http_connection = list_push_back(&server->connections, &connection_initializer, sizeof (reactor_http));
-      reactor_http_construct(http_connection, http_handler, http_connection);
-      reactor_http_set_mode(http_connection, REACTOR_HTTP_MODE_REQUEST);
-      reactor_http_open(http_connection, event->data);
-      return REACTOR_OK;
+    case SERVER_REQUEST:
+      if (segment_equal(context->request.target, segment_string("/json"))){
+        json(context, json_object);
+      }
+      else if (segment_equal(context->request.target, segment_string("/plaintext"))){
+        plaintext(context, hello_string);
+      }
+      else{
+        plaintext(context, default_string);
+      }
+      return CORE_OK;
     default:
-      reactor_net_destruct(&server->net);
-      return REACTOR_ABORT;
+      warn("error");
+      server_destruct(server);
+      return CORE_ABORT;
     }
 }
 
-static reactor_status http_date_timer_handler(reactor_event *event)
+
+static int fork_workers()
 {
-  (void) event;
-  http_date_header(1); // update the date header
-  return REACTOR_OK;
-}
+  int e, efd, worker_count = 0;
+  pid_t pid;
+  eventfd_t eventfd_value;
+  cpu_set_t online_cpus, cpu;
 
-int main()
-{
-  struct http_server server = {0};
-  reactor_timer timer;
+  // Get set of all online CPUs
+  CPU_ZERO(&online_cpus);
+  sched_getaffinity(0, sizeof(online_cpus), &online_cpus);
 
-  setup();
-  list_construct(&server.connections);
-  reactor_core_construct();
+  int num_online_cpus = CPU_COUNT(&online_cpus); // Get count of online CPUs
+  int rel_to_abs_cpu[num_online_cpus];
+  int rel_cpu_index = 0;
 
-  // Set the correct date before the server starts. Timer then updates it every second
-  http_date_header(1);
-  reactor_timer_construct(&timer, http_date_timer_handler, &timer);
-  reactor_timer_set(&timer, 1, 1000000000);
+  // Create a mapping between the relative cpu id and absolute cpu id for cases where the cpu ids are not contiguous
+  // E.g if only cpus 0, 1, 8, and 9 are visible to the app because taskset was used or because some cpus are offline
+  // then the mapping is 0 -> 0, 1 -> 1, 2 -> 8, 3 -> 9
+  for (int abs_cpu_index = 0; abs_cpu_index < CPU_SETSIZE; abs_cpu_index++) {
+    if (CPU_ISSET(abs_cpu_index, &online_cpus)){
+      rel_to_abs_cpu[rel_cpu_index] = abs_cpu_index;
+      rel_cpu_index++;
 
-  reactor_net_construct(&server.net, net_handler, &server);
-  (void) custom_reactor_net_bind(&server.net, "0.0.0.0", "8080");
+      if (rel_cpu_index == num_online_cpus)
+        break;
+    }
+  }
 
-  reactor_core_run();
-  reactor_core_destruct();
+  // fork a new child/worker process for each available cpu
+  for (int i = 0; i < num_online_cpus; i++)
+  {
+    // Create an eventfd to communicate with the forked child process on each iteration
+    // This ensures that the order of forking is deterministic which is important when using SO_ATTACH_REUSEPORT_CBPF
+    efd = eventfd(0, EFD_SEMAPHORE);
+    if (efd == -1)
+      err(1, "eventfd");
+
+    pid = fork();
+    if (pid == -1)
+      err(1, "fork");
+
+    // Parent process. Block the for loop until the child has set cpu affinity AND started listening on its socket
+    if (pid > 0)
+    {
+      // Block waiting for the child process to update the eventfd semaphore as a signal to proceed
+      eventfd_read(efd, &eventfd_value);
+      close(efd);
+
+      worker_count++;
+      (void) fprintf(stderr, "Worker running on CPU %d\n", i);
+      continue;
+    }
+
+    // Child process. Set cpu affinity and return eventfd
+    if (pid == 0)
+    {
+      CPU_ZERO(&cpu);
+      CPU_SET(rel_to_abs_cpu[i], &cpu);
+      e = sched_setaffinity(0, sizeof cpu, &cpu);
+      if (e == -1)
+        err(1, "sched_setaffinity");
+
+      // Break out of the for loop and continue running main. The child will signal the parent once the socket is open
+      return efd;
+    }
+  }
+
+  (void) fprintf(stderr, "libreactor running with %d worker processes\n", worker_count);
+
+  wait(NULL); // wait for children to exit
+  (void) fprintf(stderr, "A worker process has exited unexpectedly. Shutting down.\n");
+  exit(EXIT_FAILURE);
 }
